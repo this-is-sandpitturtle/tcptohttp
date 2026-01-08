@@ -74,10 +74,10 @@ func parseRequestLine(s string) (*RequestLine, int, error) {
         //need more data to parse request line
         return &RequestLine{}, 0, nil 
     }
-    fmt.Println("===================")
-    fmt.Println("Gesamte Zeile:")
-    fmt.Println(s)
-    fmt.Println("===================")
+    //fmt.Println("===================")
+    //fmt.Println("Gesamte Zeile:")
+    //fmt.Println(s)
+    //fmt.Println("===================")
 
     requestLine := split[0]
     requestLineSplit := strings.Split(requestLine, " ")
@@ -107,10 +107,10 @@ func parseRequestLine(s string) (*RequestLine, int, error) {
         Method: method,
     }
 
-    fmt.Println("===================")
-    fmt.Println("Request Struc:")
-    fmt.Println(out)
-    fmt.Println("===================")
+    //fmt.Println("===================")
+    //fmt.Println("Request Struc:")
+    //fmt.Println(out)
+    //fmt.Println("===================")
     return &out, len(s), nil
 }
 
