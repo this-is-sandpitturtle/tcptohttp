@@ -59,10 +59,45 @@ func TestParseHeaders(t *testing.T) {
     assert.True(t, done)
     assert.Equal(t, 2, n)
 
+    //Multiple Values for Headers
+    headers = NewHeaders()
+    headers["multiple-values"] = "go"
+    data = []byte("multiple-values: rust\r\n\r\n")
+    n, done, err = headers.Parse(data)
+    require.NoError(t, err)
+    require.NotNil(t, headers)
+    assert.Equal(t, "go, rust", headers["multiple-values"])
+    assert.Equal(t, 23, n)
+    assert.False(t, done)
+    assert.Equal(t, 1, len(headers))
 
     //Invalid spacing Header
     headers = NewHeaders()
     data = []byte("       Host : localhost:42069       \r\n\r\n")
+    n, done, err = headers.Parse(data)
+    require.Error(t, err)
+    assert.Equal(t, 0, n)
+    assert.False(t, done)
+
+    //Invalid Header Signs
+    headers = NewHeaders()
+    data = []byte("H@st: localhost:42069       \r\n\r\n")
+    n, done, err = headers.Parse(data)
+    require.Error(t, err)
+    assert.Equal(t, 0, n)
+    assert.False(t, done)
+    
+    //Invalid Header Signs
+    headers = NewHeaders()
+    data = []byte(": localhost:42069       \r\n\r\n")
+    n, done, err = headers.Parse(data)
+    require.Error(t, err)
+    assert.Equal(t, 0, n)
+    assert.False(t, done)
+
+    //Invalid Header Signs
+    headers = NewHeaders()
+    data = []byte("just some random bs\r\n")
     n, done, err = headers.Parse(data)
     require.Error(t, err)
     assert.Equal(t, 0, n)
