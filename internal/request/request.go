@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/this-is-sandpitturtle/httpfromtcp/internal/headers"
@@ -14,16 +15,19 @@ import (
 type state int
 const supportedVersion = "1.1"
 const crlf = "\r\n"
+const contentLengthHeader = "content-length"
 
 const (
     initialized state = iota
     parsingHeaders
+    parsingBody
     done 
 )
 
 type Request struct {
    RequestLine RequestLine 
    Headers headers.Headers
+   Body []byte
    state state
 }
 
@@ -37,17 +41,22 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
     parsedRequest := Request{
         RequestLine: RequestLine{},
         Headers: headers.NewHeaders(),
+        Body: make([]byte, 0),
     }
     line := make([]byte, 8)
     window := make([]byte, 8)
     var alreadyParsed int
     var alreadyRead int
-    var counter int
+    eof := false
     for {
-        counter++
-        read, err := reader.Read(window)
-        if counter >= 100 {
+        if eof {
             break
+        }
+        read, err := reader.Read(window)
+        if err != nil {
+            if errors.Is(err, io.EOF) {
+                eof = true
+            }
         }
         //fmt.Printf("read: %d \n", read)
         for i:=alreadyParsed; i<alreadyRead + read; i++ {
@@ -59,26 +68,21 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
         alreadyRead += read
         alreadyParsed += read
         
+    
         consumedBytes, err := parsedRequest.parse(line)
 
         if consumedBytes != 0 {
-            //fmt.Println("=====================")
-            //fmt.Println("Parsed Request so far:")
-            //fmt.Println(parsedRequest)
-            //fmt.Println("=====================")
-            //fmt.Println("Vorher:")
-            //fmt.Println(string(line))
-
             newLine := make([]byte, len(line))
             j:=0
             for i:=consumedBytes; i<len(line); i++ {
                 if line[i] != '\x00' {
                     newLine[j] = line[i]
+                    j++
                 }
-                j++
             }
 
             line = newLine
+
             alreadyParsed = j
             alreadyRead = j
         }
@@ -91,6 +95,12 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
             break
         }
         
+    }
+
+    if parsedRequest.state != done {
+        fmt.Println(parsedRequest)
+        fmt.Println(parsedRequest.state)
+        return &parsedRequest, errors.New("invalid request ---------------")
     }
 
     return &parsedRequest, nil
@@ -146,10 +156,6 @@ func (r *Request) parse(data []byte) (int, error) {
         parsedRequest, consumed, err := parseRequestLine(s)
 
         if err != nil {
-            // maybe?
-            //fmt.Println("error in parseRequest Line")
-            //fmt.Println(err)
-            r.state = done
             return 0, err
         }
 
@@ -161,24 +167,61 @@ func (r *Request) parse(data []byte) (int, error) {
         }
         return consumed, nil
     case parsingHeaders:
-        //fmt.Println("=====================")
-        //fmt.Println(string(data))
-        //fmt.Println("=====================")
-        consumedBytes, finished, err := r.Headers.Parse(data) //bool ignored
+        consumedBytes, finished, err := r.Headers.Parse(data) 
         if err != nil {
             fmt.Printf("errors parsing header: %s\n", string(data))
             return 0, err
         }
         if finished {
-            r.state = done
-        }
-        //DEBUG
-        if consumedBytes != 0 {
-            fmt.Println("=====================")
-            fmt.Println(r.Headers)
-            fmt.Println("=====================")
+            if n, ok := r.Headers[contentLengthHeader]; !ok || n == "0" {
+                r.state = done
+            } else {
+                r.state = parsingBody
+            }
         }
         return consumedBytes, nil
+    case parsingBody:
+        cl, ok := r.Headers.Get(contentLengthHeader)
+        if !ok {
+            r.state = done
+            return 0, nil
+        }
+        contentLength, err := strconv.Atoi(cl)
+        if err != nil {
+            return 0, errors.New("invalid content-length, couldn't convert to number")
+        }
+        //if idx := bytes.Index(data, []byte(crlf)); idx != 0 {
+        //    return 0, errors.New("Invalid start of body")
+        //}
+        if contentLength == 0 {
+            fmt.Println("CONTENT-LENGTH 0")
+            r.state = done
+            return 0, nil
+        }
+
+        nonNullChar := 0
+        
+        for i:=0; i<len(data); i++ {
+            if data[i] != '\x00' {
+                nonNullChar++
+            }
+        }
+
+        if len(r.Body) > contentLength {
+            fmt.Printf("%q\n", string(data))
+            fmt.Println("Body:")
+            fmt.Printf("%q\n", string(r.Body))
+            fmt.Println(len(data))
+            return 0, errors.New("body length exceeds content-length")
+        }
+
+        if nonNullChar == contentLength {
+            r.Body = append(r.Body, data[:nonNullChar]...) //bis letzter non null charakter und jedes element
+            r.state = done
+            return contentLength, nil
+        }
+
+        return 0, nil
     case done:
         return 0, errors.New("trying to read into request with state done")
     default:

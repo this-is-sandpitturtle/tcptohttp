@@ -37,7 +37,7 @@ func TestParseHeaders(t *testing.T) {
     require.NoError(t, err)
     require.NotNil(t, headers)
     assert.Equal(t, "localhost:42069", headers["host"])
-    assert.Equal(t, 21, n)
+    assert.Equal(t, 23, n)
     assert.False(t, done)
 
     data = []byte("Accept: */*\r\n\r\n")
