@@ -31,10 +31,12 @@ func (h Headers) Get(key string) (string, bool) {
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
     //fmt.Println("Headers.Parse")
+    //fmt.Printf("%q\n", data)
     idx := bytes.Index(data, []byte(crlf))
-    lastIdx := bytes.LastIndex(data, []byte(crlf))
+    //fmt.Println("HIER KOMMT DER idx: ", idx)
+    
+    //lastIdx := bytes.LastIndex(data, []byte(crlf))
     consumedBytes := idx + 2
-    fmt.Printf("%q\n", data)
     if idx == -1 {
         return 0, false, nil
     }
@@ -84,9 +86,17 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
         h.Set(key, value)
     }
 
-    if lastIdx > idx {
-        return consumedBytes, true, nil
+
+
+    // followup crlf check
+    if consumedBytes != 0 && len(data) > consumedBytes + 1 { 
+       if data[consumedBytes] == '\r' && data[consumedBytes + 1] == '\n' {
+           //if double crlf then were finished with headers
+           fmt.Println("++++++++++++++++++++++++++++++++++++")
+           return consumedBytes + 2, true, nil
+       }
     }
+   
 
     //len(data)-2 because the \r\n doesn't count as consumed
     //maybe there is a problem with consuming bytes because the last \r\n shouldn't count as consumed

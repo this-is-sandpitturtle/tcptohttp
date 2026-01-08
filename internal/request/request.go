@@ -1,7 +1,7 @@
 package request
 
 import (
-	"bytes"
+	//	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +16,7 @@ import (
 type state int
 const supportedVersion = "1.1"
 const crlf = "\r\n"
+const NULL = "\x00"
 const contentLengthHeader = "content-length"
 
 const (
@@ -39,80 +40,50 @@ type RequestLine struct {
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-    parsedRequest := Request{
+    req := Request{
         RequestLine: RequestLine{},
         Headers: headers.NewHeaders(),
         Body: make([]byte, 0),
     }
     line := make([]byte, 1024)
-    window := make([]byte, 1024)
-    var alreadyParsed int
-    var alreadyRead int
-    for {
-        read, err := reader.Read(window)
-        if read == 0 {
-            //MAYBE THIS IS FEASIBLE TO DETERMINE THE END OF PARTIAL CONTENT
-            //break when no new data is read
-            //in tcp we send ACK and NACK to acknowledge receiving of data
-            //so when we read no new data the request should definitely be over.
-            //and should have been already parsed.
-            //TODO
-            //Except for cases where we read the entire request in one go...
-            // ---------------------------------------------------------------
-            //in cases where we read the entire request in one line (realistic buffer size of 1024 bytes for example)
-            //i think we have to check if we already have more than one part --> determined by crlf
-            //and we have to loop through the parts and parse.
-            //then it should work.
-            //parse and resize until the request is completely consumed i guess...
-            break
-        }
-
-        for i:=alreadyParsed; i<alreadyRead + read; i++ {
-            if i >= len(line) {
-                line = append(line, window[i - alreadyRead])
-            }
-            line[i] = window[i - alreadyRead]
-        }
-        alreadyRead += read
-        alreadyParsed += read
-    
-        consumedBytes, err := parsedRequest.parse(line)
-
-        if err != nil {
-            return &Request{}, err
-        }
-
-        if consumedBytes != 0 {
-            newLine := make([]byte, len(line))
-            j:=0
-            for i:=consumedBytes; i<len(line); i++ {
-                if line[i] != '\x00' {
-                    newLine[j] = line[i]
-                    j++
-                }
-            }
-
+    alreadyRead := 0
+    for req.state != done {
+        //make new buffer if read bytes extend over length of line
+        if alreadyRead >= len(line) {
+            newLine := make([]byte, len(line) * 2)
+            copy(newLine, line[:])
             line = newLine
-
-            alreadyParsed = j
-            alreadyRead = j
         }
-        
-        if parsedRequest.state == done {
+        readBytes, err := reader.Read(line[alreadyRead:])
+        if readBytes == 0 {
+            if req.state != done {
+                fmt.Printf("incomplete request, in state: %d, read n bytes on EOF: %d\n", req.state, readBytes)
+                fmt.Printf("%q\n", line)
+                fmt.Println(req)
+                return nil, errors.New("BASICALLY EOF ERROR")
+            }
             break
         }
+        //If err != nil {
+        //    return nil, err
+        //}
+        alreadyRead += readBytes
+
+        alreadyParsed, err := req.parse(line[:alreadyRead]) //other try pass in to index of all read bytes
+        if err != nil {
+            return nil, err
+        }
         
+        //reset line and alreadyRead
+        copy(line, line[alreadyParsed:])
+        alreadyRead -= alreadyParsed 
     }
 
-    if parsedRequest.state != done {
-        fmt.Println(parsedRequest)
-        return &parsedRequest, errors.New("invalid request ---------------")
-    }
-
-    return &parsedRequest, nil
+    return &req, nil
 }
 
-func parseRequestLine(s string) (*RequestLine, int, error) {
+func parseRequestLine(data []byte) (*RequestLine, int, error) {
+    s := string(data)
     split := strings.Split(s, crlf)
     idxCrlf := strings.Index(s, crlf)
     if len(split) < 2 {
@@ -150,12 +121,28 @@ func parseRequestLine(s string) (*RequestLine, int, error) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
+    bytesParsed := 0
+    for r.state != done {
+        consumed, err := r.parseSingle(data[bytesParsed:])
+        if err != nil {
+            return 0, err
+        }
+        bytesParsed += consumed
+
+        if consumed == 0 {
+            break
+        }
+    }
+    
+    return bytesParsed, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
     switch r.state {
     case initialized:
-        s := string(data)
-        idx := bytes.Index(data, []byte(crlf))
-        lastIdx := bytes.LastIndex(data, []byte(crlf))
-        parsedRequest, consumed, err := parseRequestLine(s)
+       // idx := bytes.Index(data, []byte(crlf))
+       // lastIdx := bytes.LastIndex(data, []byte(crlf))
+        parsedRequest, consumed, err := parseRequestLine(data)
 
         if err != nil {
             return 0, err
@@ -167,11 +154,12 @@ func (r *Request) parse(data []byte) (int, error) {
             r.RequestLine.HttpVersion = parsedRequest.HttpVersion
             r.state = parsingHeaders
         }
-        if lastIdx > idx {
-            r.state = done
-        }
+       // if lastIdx > idx {
+       //     r.state = done
+       // }
         return consumed, nil
     case parsingHeaders:
+        fmt.Printf("%q\n", string(data))
         consumedBytes, finished, err := r.Headers.Parse(data) 
         if err != nil {
             fmt.Printf("errors parsing header: %s\n", string(data))
@@ -181,11 +169,15 @@ func (r *Request) parse(data []byte) (int, error) {
             if n, ok := r.Headers[contentLengthHeader]; !ok || n == "0" {
                 r.state = done
             } else {
+                fmt.Println("After Header Parsing")
+                fmt.Printf("%q\n", data)
                 r.state = parsingBody
             }
         }
         return consumedBytes, nil
     case parsingBody:
+        fmt.Println("Parsing Body")
+        fmt.Printf("%q\n", data)
         cl, ok := r.Headers.Get(contentLengthHeader)
         if !ok {
             r.state = done
@@ -202,7 +194,6 @@ func (r *Request) parse(data []byte) (int, error) {
             r.state = done
             return 0, nil
         }
-
         nonNullChar := 0
         for i:=0; i<len(data); i++ {
             if data[i] != '\x00' {
@@ -220,14 +211,17 @@ func (r *Request) parse(data []byte) (int, error) {
         //}
 
         if nonNullChar == contentLength {
+            fmt.Println("das hier geht schief richtig?")
             r.Body = append(r.Body, data[:nonNullChar]...) //bis letzter non null charakter und jedes element
             r.state = done
             return contentLength, nil
         }
 
         if len(r.Body) > contentLength {
+            fmt.Println("das hier geht schief richtig?")
             return 0, errors.New("body length exceeds content-length")
         }
+
         return 0, nil
     case done:
         return 0, errors.New("trying to read into request with state done")

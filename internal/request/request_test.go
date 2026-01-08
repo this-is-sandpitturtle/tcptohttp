@@ -39,8 +39,9 @@ func TestRequestLineParse(t *testing.T) {
     }
 
     // Happy GET-Request | RequestLine
-    fmt.Println(reader.data)
     r, err := RequestFromReader(reader)
+    fmt.Println("Parsed Request")
+    fmt.Println(r)
     require.NoError(t, err)
     require.NotNil(t, r)
     assert.Equal(t, "GET", r.RequestLine.Method)
@@ -185,13 +186,16 @@ func TestParseBody(t *testing.T) {
     //Test different order of header parameters
     //TODO: BREAKS FOR HIGHER CHUNK SIZES
     reader = &chunkReader{
-        data: "POST /submit HTTP/1.1\r\n" +
+        data: "POST /submittest HTTP/1.1\r\n" +
         "Content-Length: 13\r\n" +
         "Host: localhost:42069\r\n" +
         "\r\n" +
         "hello world!\n",
         numBytesPerRead: len(reader.data),
     }
+    fmt.Println("-----------------------------------------------------------------------------------")
+    fmt.Println(reader.numBytesPerRead)
+    fmt.Println(r)
     r, err = RequestFromReader(reader)
     require.NoError(t, err)
     require.NotNil(t, r)

@@ -17,7 +17,7 @@ func TestParseHeaders(t *testing.T) {
     require.NoError(t, err)
     require.NotNil(t, headers)
     assert.Equal(t, "localhost:42069", headers["host"])
-    assert.Equal(t, 23, n)
+    assert.Equal(t, 25, n)
     assert.True(t, done)
     
     //Valid Header with extra whitespace
@@ -27,7 +27,7 @@ func TestParseHeaders(t *testing.T) {
     require.NoError(t, err)
     require.NotNil(t, headers)
     assert.Equal(t, "localhost:42069", headers["host"])
-    assert.Equal(t, 37, n)
+    assert.Equal(t, 39, n)
     assert.True(t, done)
 
     //Valid 2 Headers
@@ -45,7 +45,7 @@ func TestParseHeaders(t *testing.T) {
     require.NoError(t, err)
     require.NotNil(t, headers)
     assert.Equal(t, "*/*", headers["accept"])
-    assert.Equal(t, 13, n)
+    assert.Equal(t, 15, n)
     assert.True(t, done)
     assert.Equal(t, 2, len(headers))
 
@@ -67,7 +67,7 @@ func TestParseHeaders(t *testing.T) {
     require.NoError(t, err)
     require.NotNil(t, headers)
     assert.Equal(t, "go, rust", headers["multiple-values"])
-    assert.Equal(t, 23, n)
+    assert.Equal(t, 25, n)
     assert.True(t, done)
     assert.Equal(t, 1, len(headers))
 
