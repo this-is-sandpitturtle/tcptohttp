@@ -23,9 +23,8 @@ func main() {
         fmt.Println("connection from ",conn.RemoteAddr()," has been established")
         ch := getLinesChannel(conn)
         for s := range ch {
-            fmt.Print(s)
+            fmt.Println(s)
         }
-
         fmt.Printf("\nconnection from %v is closed\n", conn.RemoteAddr())
     }
 }
@@ -50,11 +49,13 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
             }
             splits := strings.Split(string(b), "\n")
             if len(splits) == 2 {
+                currentLine += string(splits[0])
                 ch <- currentLine
-                currentLine += string(splits[1])
                 currentLine = ""
+                currentLine += string(splits[1])
+            } else {
+                currentLine += string(splits[0])
             }
-            currentLine += string(splits[0])
         }
     }()
 
