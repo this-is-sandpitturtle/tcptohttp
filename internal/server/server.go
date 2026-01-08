@@ -5,12 +5,18 @@ import (
 	"log"
 	"net"
 	"sync/atomic"
+
+	"github.com/this-is-sandpitturtle/httpfromtcp/internal/request"
+	"github.com/this-is-sandpitturtle/httpfromtcp/internal/response"
 )
 
 type Server struct {
-    Running atomic.Bool
     Listener net.Listener
+    Handler Handler
+    Running atomic.Bool
 }
+
+type Handler func(w *response.Writer, req *request.Request) 
 
 type state int
 const protocol = "tcp"
@@ -21,7 +27,7 @@ const (
     stopped
 )
 
-func Serve(port int) (*Server, error) {
+func Serve(port int, h Handler) (*Server, error) {
     serv := Server{Running: atomic.Bool{}}
     listener, err := net.Listen(protocol, fmt.Sprintf(":%d", port))
     if err != nil {
@@ -29,6 +35,7 @@ func Serve(port int) (*Server, error) {
     }
     serv.Listener = listener
     serv.Running.Store(true)
+    serv.Handler = h
     go serv.listen()
     return &serv, nil
 }
@@ -43,6 +50,7 @@ func (s *Server) Close() error {
     return nil
 }
 
+//Don't know maybe this needs a handler
 func (s *Server) listen() {
     for {
         conn, err := s.Listener.Accept()
@@ -59,15 +67,45 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
     defer conn.Close()
-    response := "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: text/plain\r\n" + 
-                //"Content-Length: 14\r\n" +
-                "\r\n" +    
-                "Hello World!\r\n"
-    _, err := conn.Write([]byte(response))
+    req, err := request.RequestFromReader(conn)
+    fmt.Println(req)
     if err != nil {
-        log.Fatal("couldn't write response")
+        fmt.Println("Generic error response without body: ", err)
+        response.WriteError(conn, response.HandlerError{StatusCode: 400, Message: err.Error()})
         return
     }
-    return
+    buffer := &response.Writer{
+        W: conn,
+        Status: response.Initialized,
+        }
+    s.Handler(buffer, req)
+//    if handlerError != nil {
+//        fmt.Println("handler error - response write error")
+//        fmt.Println(handlerError)
+//        handlerError.WriteError(conn)
+//        return
+//    }
+   // buffer.WriteStatusLine(buffer.StatusCode)
+   // buffer.WriteHeaders(buffer.Headers)
+   // buffer.WriteBody(buffer.Body)
+    //body := buffer.String()
+    //head := response.GetDefaultHeaders(len(body))
+    //err = response.WriteStatusLine(conn, 200)
+    //if err != nil {
+    //    fmt.Println("status line writing problem: ", err)
+    //    return
+    //}
+
+    //err = response.WriteHeaders(conn, head)
+    //if err != nil {
+    //    fmt.Println("header writing went wrong: ", err)
+    //    return
+    //}
+
+    //_,err = response.WriteBody(conn, []byte(body))
+    //if err != nil {
+    //    fmt.Println("body writing went wrong: ", err)
+    //}
 }
+
+

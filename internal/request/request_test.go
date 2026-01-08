@@ -111,6 +111,7 @@ func TestParseHeaders(t *testing.T) {
         numBytesPerRead: 3,
     }
     r, err = RequestFromReader(reader)
+    fmt.Println(r)
     require.NoError(t, err)
     require.NotNil(t, r)
     assert.Equal(t, 0, len(r.Headers))
@@ -181,18 +182,32 @@ func TestParseBody(t *testing.T) {
     require.NotNil(t, r)
     assert.Equal(t, "hello world!\n", string(r.Body))
 
+    //Test different order of header parameters
+    //TODO: BREAKS FOR HIGHER CHUNK SIZES
+    reader = &chunkReader{
+        data: "POST /submit HTTP/1.1\r\n" +
+        "Content-Length: 13\r\n" +
+        "Host: localhost:42069\r\n" +
+        "\r\n" +
+        "hello world!\n",
+        numBytesPerRead: len(reader.data),
+    }
+    r, err = RequestFromReader(reader)
+    require.NoError(t, err)
+    require.NotNil(t, r)
+    assert.Equal(t, "13", r.Headers["content-length"])
+    assert.Equal(t, "localhost:42069", r.Headers["host"])
+    assert.Equal(t, "hello world!\n", string(r.Body))
+
     //Test: Empty Body Content-Legnth 0
     reader = &chunkReader{
         data: "POST /submit HTTP/1.1\r\n" +
         "Host: localhost:42069\r\n" +
         "Content-Length: 0\r\n" +
         "\r\n",
-        numBytesPerRead: 10,
+        numBytesPerRead: 10, 
     }
     r, err = RequestFromReader(reader)
-    fmt.Println("!!!")
-    fmt.Println(r)
-    fmt.Println("!!!")
     require.NoError(t, err)
     require.NotNil(t, r)
     assert.Equal(t, "", string(r.Body))
@@ -218,10 +233,12 @@ func TestParseBody(t *testing.T) {
         "partial content",
         numBytesPerRead: 3,
     }
+    fmt.Println("-------------------------------------------------")
     r, err = RequestFromReader(reader)
     require.Error(t, err)
     
     // Test: Body shorter than reported content length
+    fmt.Println("-------------------------------------------------")
     reader = &chunkReader{
         data: "POST /submit HTTP/1.1\r\n" +
         "Host: localhost:42069\r\n" +
