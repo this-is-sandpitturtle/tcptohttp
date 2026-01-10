@@ -1,8 +1,8 @@
-##Starting
+## Starting
 
 go run ./cmd/httpserver/
 
-##Test-Requests:
+## Test-Requests:
 
 GET /
 
@@ -10,15 +10,15 @@ GET /yourproblem
 
 GET /myproblem
 
-##Other features: 
+## Other features: 
 
-###Chunked Encoding
+### Chunked Encoding
 
 GET /httbin/stream/100
 
 GET /httbin/html
 
-###Binary
+### Binary
 
 GET /video
 
